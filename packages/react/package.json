@@ -1,5 +1,5 @@
 {
-    "name": "@valync/react",
+    "name": "@epikoder/valync-react",
     "version": "0.1.0",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
@@ -7,7 +7,7 @@
         "build": "tsc -p tsconfig.json"
     },
     "dependencies": {
-        "@valync/core": "workspace:*",
+        "@epikoder/valync-core": "workspace:*",
         "ts-results-es": "^5.0.1",
         "react": "^18.0.0"
     },

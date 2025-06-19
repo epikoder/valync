@@ -7,7 +7,7 @@ import {
     AsyncLoading,
     AsyncError,
     AsyncData,
-} from "@valync/core";
+} from "@epikoder/valync-core";
 
 type UseAsyncOptions<T> = {
     cache?: boolean;

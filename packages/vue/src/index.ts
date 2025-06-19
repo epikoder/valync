@@ -7,7 +7,7 @@ import {
     AsyncLoading,
     AsyncError,
     AsyncData,
-} from "@valync/core";
+} from "@epikoder/valync-core";
 
 const cache = new Map<string, AsyncData<any>>();
 

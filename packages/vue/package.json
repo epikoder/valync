@@ -1,5 +1,5 @@
 {
-    "name": "@valync/vue",
+    "name": "@epikoder/valync-vue",
     "version": "0.1.0",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
@@ -15,7 +15,7 @@
         "build": "tsc -p tsconfig.json"
     },
     "dependencies": {
-        "@valync/core": "workspace:*",
+        "@epikoder/valync-core": "workspace:*",
         "ts-results-es": "^5.0.1",
         "vue": "^3.3.0"
     },

@@ -6,12 +6,12 @@ PACKAGES=("core" "react" "vue")
 
 for pkg in "${PACKAGES[@]}"
 do
-  echo "📦 Publishing @valync/$pkg..."
+  echo "📦 Publishing @epikoder/valync-$pkg..."
   cd "packages/$pkg"
 
   # Double-check package is versioned and ready
   if grep -q '"private": true' package.json; then
-    echo "❌ Skipping @valync/$pkg (marked private)"
+    echo "❌ Skipping @epikoder/valync-$pkg (marked private)"
   else
     pnpm publish --access public
   fi

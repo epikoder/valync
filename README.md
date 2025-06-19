@@ -19,12 +19,12 @@
 
 #### React
 ```bash
-pnpm add @valync/react @valync/core ts-results-es
+pnpm add @epikoder/valync-react @epikoder/valync-core ts-results-es
 ```
 
 #### Vue 3
 ```bash
-pnpm add @valync/vue @valync/core ts-results-es
+pnpm add @epikoder/valync-vue @epikoder/valync-core ts-results-es
 ```
 
 ---
@@ -70,7 +70,7 @@ AsyncData<T>; // contains Option<T>: Some(value) or None
 ### React
 
 ```tsx
-import { useValync, AsyncValue } from "@valync/react";
+import { useValync, AsyncValue } from "@epikoder/valync-react";
 
 function UserProfile({ userId }: { userId: string }) {
     const [state, refetch] = useValync<{ name: string; age: number }>(
@@ -99,7 +99,7 @@ function UserProfile({ userId }: { userId: string }) {
 ### Vue 3
 
 ```tsx
-import { useValync, AsyncValue } from "@valync/vue";
+import { useValync, AsyncValue } from "@epikoder/valync-vue";
 import { computed } from "vue";
 
 export default {
