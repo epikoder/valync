@@ -17,14 +17,17 @@
 
 ## Installation
 
-#### React
+#### Npm
 ```bash
-pnpm add @epikoder/valync-react @epikoder/valync-core ts-results-es
+npm i valync
 ```
-
-#### Vue 3
+#### yarn
 ```bash
-pnpm add @epikoder/valync-vue @epikoder/valync-core ts-results-es
+yarn add valync
+```
+#### Bun
+```bash
+bun add valync
 ```
 
 ---
