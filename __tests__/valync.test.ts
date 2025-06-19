@@ -1,4 +1,4 @@
-import { AsyncData, AsyncError, AsyncLoading } from "../src/index";
+import { AsyncData, AsyncError, AsyncLoading } from "../src/core/index";
 import { Some } from "ts-results-es";
 
 describe("AsyncValue", () => {

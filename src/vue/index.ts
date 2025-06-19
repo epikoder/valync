@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { ref, onMounted, watch } from "vue";
 import { Some, None } from "ts-results-es";
 import {
     normalizeKey,
@@ -7,56 +7,55 @@ import {
     AsyncLoading,
     AsyncError,
     AsyncData,
-} from "@epikoder/valync-core";
-
-type UseAsyncOptions<T> = {
-    cache?: boolean;
-    fetchOnMount?: boolean;
-    retryCount?: number;
-    onData?: (data: T) => T;
-    watch?: any[];
-    initialData?: ApiResponse<T>;
-};
+} from "../core";
 
 const cache = new Map<string, AsyncData<any>>();
 
 export function useValync<T>(
     key: string | Record<string, any>,
-    options: UseAsyncOptions<T> = {},
-): [AsyncValue<T>, () => void, (updater: (prev: T | null) => T) => void] {
+    options: {
+        cache?: boolean;
+        fetchOnMount?: boolean;
+        retryCount?: number;
+        onData?: (data: T) => T;
+        watch?: any[];
+        initialData?: ApiResponse<T>;
+    } = {},
+) {
     const keyStr = normalizeKey(key);
-    const controllerRef = useRef<AbortController>(null);
+    const controller = ref<AbortController>();
 
-    const [state, setState] = useState<AsyncValue<T>>(() => {
-        if (options.initialData) {
-            return options.initialData.status === "success"
+    let initialValue: AsyncValue<T>;
+    if (options.initialData) {
+        initialValue =
+            options.initialData.status === "success"
                 ? new AsyncData(Some(options.initialData.data))
                 : new AsyncError(options.initialData.error);
-        }
-        if (options.cache !== false && cache.has(keyStr)) {
-            return cache.get(keyStr)!;
-        }
-        return new AsyncData<T>(None);
-    });
+    } else if (options.cache !== false && cache.has(keyStr)) {
+        initialValue = cache.get(keyStr)!;
+    } else {
+        initialValue = new AsyncData<T>(None);
+    }
+
+    const state = ref<AsyncValue<T>>(initialValue);
 
     const isClient =
         typeof window !== "undefined" && typeof AbortController !== "undefined";
 
     const doFetch = () => {
-        controllerRef.current?.abort();
-        const ctrl = new AbortController();
-        controllerRef.current = ctrl;
+        controller.value?.abort();
+        controller.value = new AbortController();
 
         if (options.cache !== false && cache.has(keyStr)) {
-            setState(cache.get(keyStr)!);
+            state.value = cache.get(keyStr)!;
             return;
         }
 
-        setState(new AsyncLoading<T>());
+        state.value = new AsyncLoading<T>();
 
         const attempt = (tries: number) => {
             fetch(typeof key === "string" ? key : keyStr, {
-                signal: ctrl.signal,
+                signal: controller.value!.signal,
             })
                 .then(async (resp): Promise<ApiResponse<T>> => {
                     let json: any;
@@ -84,43 +83,37 @@ export function useValync<T>(
                     return json;
                 })
                 .then((res) => {
-                    if (ctrl.signal.aborted) return;
+                    if (controller.value!.signal.aborted) return;
                     if (res.status === "failed")
-                        setState(new AsyncError(res.error));
+                        state.value = new AsyncError(res.error);
                     else {
                         const data = options.onData
                             ? options.onData(res.data)
                             : res.data;
                         const sd = new AsyncData(Some(data));
                         if (options.cache !== false) cache.set(keyStr, sd);
-                        setState(sd);
+                        state.value = sd;
                     }
                 })
                 .catch((err) => {
-                    if (ctrl.signal.aborted) return;
+                    if (controller.value!.signal.aborted) return;
                     if (tries > 0) return attempt(tries - 1);
-                    setState(
-                        new AsyncError({
-                            name: "NetworkError",
-                            message: err.message,
-                        }),
-                    );
+                    state.value = new AsyncError({
+                        name: "NetworkError",
+                        message: err.message,
+                    });
                 });
         };
 
         attempt(options.retryCount ?? 0);
     };
 
-    useEffect(() => {
-        if (!isClient || options.initialData) return;
-        if (options.fetchOnMount !== false) doFetch();
-        return () => controllerRef.current?.abort();
-    }, [keyStr]);
+    if (isClient && options.fetchOnMount !== false && !options.initialData) {
+        onMounted(doFetch);
+    }
 
-    if (options.watch) {
-        useEffect(() => {
-            if (isClient) doFetch();
-        }, options.watch);
+    if (isClient && options.watch && options.watch.length > 0) {
+        watch(options.watch, doFetch);
     }
 
     const refetch = () => {
@@ -128,15 +121,16 @@ export function useValync<T>(
     };
 
     const setData = (updater: (prev: T | null) => T) => {
-        setState((prev) => {
-            if (!(prev instanceof AsyncData)) return prev;
-            const current = prev.value.isSome() ? prev.value.unwrap() : null;
-            const updated = updater(current);
-            const newData = new AsyncData(Some(updated));
-            if (options.cache !== false) cache.set(keyStr, newData);
-            return newData;
-        });
+        const currentVal =
+            state.value instanceof AsyncData
+                ? state.value.value.isSome()
+                    ? state.value.value.unwrap()
+                    : null
+                : null;
+        const newVal = new AsyncData(Some(updater(currentVal)));
+        if (options.cache !== false) cache.set(keyStr, newVal);
+        state.value = newVal;
     };
 
-    return [state, refetch, setData];
+    return [state, refetch, setData] as const;
 }

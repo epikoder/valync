@@ -1,0 +1,17 @@
+{
+    "compilerOptions": {
+        "outDir": "dist",
+        "module": "ESNext",
+        "target": "ES2020",
+        "moduleResolution": "Node",
+        "declaration": true,
+        "declarationMap": true,
+        "sourceMap": true,
+        "composite": false,
+        "rootDir": "src",
+        "baseUrl": ".",
+        "esModuleInterop": true,
+        "skipLibCheck": true
+    },
+    "include": ["src/**/*"]
+}
