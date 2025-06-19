@@ -1,0 +1,22 @@
+{
+    "name": "valync",
+    "version": "0.1.0",
+    "description": "",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "MIT",
+    "packageManager": "pnpm@10.12.1",
+    "dependencies": {
+        "ts-results-es": "^5.0.1"
+    },
+    "devDependencies": {
+        "@types/jest": "^30.0.0",
+        "@types/react": "^19.1.8",
+        "jest": "^30.0.2",
+        "ts-jest": "^29.4.0"
+    }
+}

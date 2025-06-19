@@ -1,0 +1,33 @@
+{
+    "name": "@valync/vue",
+    "version": "0.1.0",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "module": "dist/index.js",
+    "exports": {
+        ".": {
+            "import": "./dist/index.js",
+            "require": "./dist/index.js",
+            "types": "./dist/index.d.ts"
+        }
+    },
+    "scripts": {
+        "build": "tsc -p tsconfig.json"
+    },
+    "dependencies": {
+        "@valync/core": "workspace:*",
+        "ts-results-es": "^5.0.1",
+        "vue": "^3.3.0"
+    },
+    "peerDependencies": {
+        "vue": "^3.3.0"
+    },
+    "keywords": [
+        "vue",
+        "async",
+        "state",
+        "valync",
+        "composable"
+    ],
+    "license": "MIT"
+}
