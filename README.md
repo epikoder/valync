@@ -151,8 +151,10 @@ const [state, refetch, setData] = useAxiosValync<User>("/api/user", {
     },
 });
 ```
-## ☕️ Send Me a Beer
+
+## ☕️ Buy Me a Drink
 
 If this project saved you time, helped you ship faster, or made you say "damn, that's slick!" — consider buying me a beer 🍻
 
-[![Static Badge](https://img.shields.io/badge/Send%20Me%20a%20Coffee-grey?style=for-the-badge&logo=buymeacoffee)](https://cointr.ee/epikoder)
+👉 [Send me a drink on Cointr.ee](https://cointr.ee/epikoder)
+
