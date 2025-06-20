@@ -20,12 +20,17 @@ export function normalizeKey(key: CacheKey): string {
 }
 
 // API Response standardization
-export type ApiResponse<T> =
-    | { status: "success"; data: T }
-    | {
-          status: "failed";
-          error: { name: string; message: string; code?: number | string };
-      };
+export type ApiErrorResponse = {
+    status: "failed";
+    error: { name: string; message: string; code?: number | string };
+};
+
+export type ApiSuccessResponse<T> = {
+    status: "success";
+    data: T;
+};
+
+export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
 
 // Base abstract class for async state
 export abstract class AsyncValue<T> {

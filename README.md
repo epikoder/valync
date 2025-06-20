@@ -107,6 +107,18 @@ function UserProfile({ userId }: { userId: string }) {
 }
 ```
 
+```tsx
+const [state, onLogin] = useValync("/api/auth", {
+    cache: false,
+    fetchOnMount: false,
+    init: {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+    },
+});
+````
+
 ### Vue 3
 
 ```tsx
@@ -157,4 +169,3 @@ const [state, refetch, setData] = useAxiosValync<User>("/api/user", {
 If this project saved you time, helped you ship faster, or made you say "damn, that's slick!" — consider buying me a beer 🍻
 
 👉 [Send me a drink on Cointr.ee](https://cointr.ee/epikoder)
-

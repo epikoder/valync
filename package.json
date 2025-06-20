@@ -1,6 +1,6 @@
 {
     "name": "valync",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "main": "dist/core/index.js",
     "types": "dist/core/index.d.ts",
     "exports": {
