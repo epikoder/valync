@@ -31,14 +31,19 @@ export type ApiSuccessResponse<T> = {
 };
 
 export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
+export type Handler<T, R> = {
+    loading?: () => R;
+    error?: (err: {
+        name: string;
+        message: string;
+        code?: number | string;
+    }) => R;
+    data?: (value: Option<T>) => R;
+};
 
-// Base abstract class for async state
+// Base abstract class for async stZte
 export abstract class AsyncValue<T> {
-    abstract when<R>(handlers: {
-        loading: () => R;
-        error: (err: { name: string; message: string; code?: number }) => R;
-        data: (value: Option<T>) => R;
-    }): R;
+    abstract when<R>(handlers: Handler<T, R>): R;
 
     isLoading() {
         return this instanceof AsyncLoading;
@@ -55,8 +60,8 @@ export abstract class AsyncValue<T> {
 
 // Represents loading state
 export class AsyncLoading<T> extends AsyncValue<T> {
-    when<R>(h: any): R {
-        return h.loading();
+    when<R>(h: Handler<T, R>): R {
+        return h.loading ? h.loading() : undefined;
     }
 }
 
@@ -67,8 +72,8 @@ export class AsyncError<T = unknown> extends AsyncValue<T> {
     ) {
         super();
     }
-    when<R>(h: any): R {
-        return h.error(this.error);
+    when<R>(h: Handler<T, R>): R {
+        return h.error ? h.error(this.error) : undefined;
     }
 }
 
@@ -77,7 +82,7 @@ export class AsyncData<T> extends AsyncValue<T> {
     constructor(public value: Option<T>) {
         super();
     }
-    when<R>(h: any): R {
-        return h.data(this.value);
+    when<R>(h: Handler<T, R>): R {
+        return h.data ? h.data(this.value) : undefined;
     }
 }
