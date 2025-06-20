@@ -1,5 +1,5 @@
 // core.ts — core abstractions shared across frameworks
-import { Option, Some, None } from "ts-results-es";
+import { Option } from "ts-results-es";
 
 export type ValyncOptions<T> = {
     init?: Omit<RequestInit, "signal">;
@@ -61,7 +61,7 @@ export class AsyncLoading<T> extends AsyncValue<T> {
 }
 
 // Represents failed state with error
-export class AsyncError<T> extends AsyncValue<T> {
+export class AsyncError<T = unknown> extends AsyncValue<T> {
     constructor(
         public error: { name: string; message: string; code?: string | number },
     ) {
