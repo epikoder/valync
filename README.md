@@ -18,14 +18,19 @@
 ## Installation
 
 #### Npm
+
 ```bash
 npm i valync
 ```
+
 #### yarn
+
 ```bash
 yarn add valync
 ```
+
 #### Bun
+
 ```bash
 bun add valync
 ```
@@ -43,6 +48,7 @@ A hook/composable to fetch and manage async data.
 
 ```ts
 {
+  init?: Omit<RequestInit, "signal">; // Pass request options for default client or custom client
   cache?: boolean; // default true, enable/disable caching
   fetchOnMount?: boolean; // default true, fetch automatically on mount
   retryCount?: number; // retry count for failed requests
@@ -51,6 +57,7 @@ A hook/composable to fetch and manage async data.
   initialData?: ApiResponse<T>; // initial server-side data for hydration
 }
 ```
+
 ---
 
 ### Return tuple
@@ -66,6 +73,7 @@ AsyncLoading<T>;
 AsyncError<T>; // contains error { name, message, code? }
 AsyncData<T>; // contains Option<T>: Some(value) or None
 ```
+
 ---
 
 ## Example usage
@@ -122,4 +130,24 @@ export default {
         return { userDisplay, refetch };
     },
 };
+```
+
+## Axios or other HTTP client
+
+```tsx
+import axios from "axios";
+import { createValyn } from "valync/react";
+
+const useAxiosValync = createValyn({
+    client: async (url, init) =>
+        await axios({ url, ...init }).then((res) => res.data), // transforms to data
+});
+
+// use in a component
+const [state, refetch, setData] = useAxiosValync<User>("/api/user", {
+    onData: (data) => {
+        // transform data to User if needed
+        return data;
+    },
+});
 ```

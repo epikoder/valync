@@ -22,6 +22,8 @@
     ],
     "keywords": [
         "valync",
+        "riverpod",
+        "riverpod-js",
         "async",
         "async-data",
         "async-state",

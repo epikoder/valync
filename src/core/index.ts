@@ -1,6 +1,16 @@
 // core.ts — core abstractions shared across frameworks
 import { Option, Some, None } from "ts-results-es";
 
+export type ValyncOptions<T> = {
+    init?: Omit<RequestInit, "signal">;
+    cache?: boolean;
+    fetchOnMount?: boolean;
+    retryCount?: number;
+    onData?: (data: T) => T;
+    watch?: any[];
+    initialData?: ApiResponse<T>;
+};
+
 // Type for cache key
 export type CacheKey = string | Record<string, any>;
 
