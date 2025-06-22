@@ -46,12 +46,12 @@ export function createValyn({
         const observerRef = useRef(
             new AsyncObserver<T>(new AsyncData<T>(None)),
         );
-        const [state, setState] = useState<AsyncValue<T>>(() => {
+        const [state, setState] = useState<AsyncValue<T>>((): AsyncValue<T> => {
             if (options.initialData) {
                 const initialData =
                     options.initialData.status === "success"
                         ? new AsyncData(Some(options.initialData.data))
-                        : new AsyncError(options.initialData.error);
+                        : new AsyncError<T>(options.initialData.error);
                 return initialData;
             }
             if (options.cache !== false && cache.has(keyStr)) {
