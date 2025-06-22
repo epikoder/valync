@@ -1,4 +1,4 @@
-import { ref, onMounted, watch } from "vue";
+import { ref, onMounted, watch, Ref } from "vue";
 import { Some, None } from "ts-results-es";
 import {
     normalizeKey,
@@ -8,19 +8,40 @@ import {
     AsyncError,
     AsyncData,
     ValyncOptions,
+    Listenable,
+    AsyncObserver,
 } from "../core";
 
 const cache = new Map<string, AsyncData<any>>();
 
+export type ValyncVueOptions<T> = Omit<ValyncOptions<T>, "init"> & {
+    init?: Ref<RequestInit>;
+};
 export function createValyn({
     client,
+    options: _options = {},
 }: {
     client: (url: string, init: RequestInit) => Promise<ApiResponse<any>>;
+    options?: Pick<
+        ValyncOptions<any>,
+        "cache" | "retryCount" | "fetchOnMount"
+    > & { headers?: HeadersInit };
 }) {
     return function <T>(
         key: string | Record<string, any>,
-        options: ValyncOptions<T> = {},
-    ): [AsyncValue<T>, () => void, (updater: (prev: T | null) => T) => void] {
+        options: ValyncVueOptions<T> = {},
+    ): [
+        Ref<AsyncValue<T>>,
+        () => void,
+        (updater: (prev: T | null) => T) => void,
+        Listenable<T>,
+    ] {
+        options.init.value = options.init.value || {};
+        Object.assign(options.init.value.headers, _options.headers);
+        options.cache = options.cache ?? _options.cache;
+        options.retryCount = options.retryCount ?? _options.retryCount;
+        options.fetchOnMount = options.fetchOnMount ?? _options.fetchOnMount;
+
         const keyStr = normalizeKey(key);
         const controller = ref<AbortController>();
 
@@ -36,6 +57,7 @@ export function createValyn({
             initialValue = new AsyncData<T>(None);
         }
 
+        const observerRef = ref(new AsyncObserver(initialValue));
         const state = ref<AsyncValue<T>>(initialValue);
 
         const isClient =
@@ -55,7 +77,7 @@ export function createValyn({
 
             const attempt = (tries: number) => {
                 client(typeof key === "string" ? key : keyStr, {
-                    ...options.init,
+                    ...options.init.value,
                     signal: controller.value!.signal,
                 })
                     .then((res) => {
@@ -97,6 +119,10 @@ export function createValyn({
             watch(options.watch, doFetch);
         }
 
+        watch(state, () => {
+            observerRef.value.set(state.value);
+        });
+
         const refetch = () => {
             if (isClient) doFetch();
         };
@@ -113,13 +139,18 @@ export function createValyn({
             state.value = newVal;
         };
 
-        return [state.value, refetch, setData] as const;
+        return [
+            state,
+            refetch,
+            setData,
+            observerRef.value.listenable(),
+        ] as const;
     };
 }
 
 export function useValync<T>(
     key: string | Record<string, any>,
-    options: ValyncOptions<T> = {},
+    options: ValyncVueOptions<T> = {},
 ) {
     const keyStr = normalizeKey(key);
     const controller = ref<AbortController>();
@@ -136,6 +167,7 @@ export function useValync<T>(
         initialValue = new AsyncData<T>(None);
     }
 
+    const observer = ref(new AsyncObserver(initialValue));
     const state = ref<AsyncValue<T>>(initialValue);
 
     const isClient =
@@ -154,7 +186,7 @@ export function useValync<T>(
 
         const attempt = (tries: number) => {
             fetch(typeof key === "string" ? key : keyStr, {
-                ...options.init,
+                ...options.init.value,
                 signal: controller.value!.signal,
             })
                 .then(async (resp): Promise<ApiResponse<T>> => {
@@ -216,6 +248,10 @@ export function useValync<T>(
         watch(options.watch, doFetch);
     }
 
+    watch(state, () => {
+        observer.value.set(state.value);
+    });
+
     const refetch = () => {
         if (isClient) doFetch();
     };
@@ -232,5 +268,5 @@ export function useValync<T>(
         state.value = newVal;
     };
 
-    return [state.value, refetch, setData] as const;
+    return [state, refetch, setData, observer.value.listenable()] as const;
 }

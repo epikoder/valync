@@ -8,27 +8,51 @@ import {
     AsyncError,
     AsyncData,
     ValyncOptions,
+    StateListener,
+    Listenable,
+    AsyncObserver,
 } from "../core";
 
 const cache = new Map<string, AsyncData<any>>();
 
 export function createValyn({
     client,
+    options: _options = {},
 }: {
     client: (url: string, init: RequestInit) => Promise<ApiResponse<any>>;
+    options?: Pick<
+        ValyncOptions<any>,
+        "cache" | "retryCount" | "fetchOnMount"
+    > & { headers?: HeadersInit };
 }) {
-    return function <T>(
+    return function useValynHook<T>(
         key: string | Record<string, any>,
         options: ValyncOptions<T> = {},
-    ): [AsyncValue<T>, () => void, (updater: (prev: T | null) => T) => void] {
+    ): [
+        AsyncValue<T>,
+        () => void,
+        (updater: (prev: T | null) => T) => void,
+        Listenable<T>,
+    ] {
+        options.init = options.init || {};
+        Object.assign(options.init.headers, _options.headers);
+        options.cache = options.cache ?? _options.cache;
+        options.retryCount = options.retryCount ?? _options.retryCount;
+        options.fetchOnMount = options.fetchOnMount ?? _options.fetchOnMount;
+
         const keyStr = normalizeKey(key);
         const controllerRef = useRef<AbortController>(null);
 
+        const observerRef = useRef(
+            new AsyncObserver<T>(new AsyncData<T>(None)),
+        );
         const [state, setState] = useState<AsyncValue<T>>(() => {
             if (options.initialData) {
-                return options.initialData.status === "success"
-                    ? new AsyncData(Some(options.initialData.data))
-                    : new AsyncError(options.initialData.error);
+                const initialData =
+                    options.initialData.status === "success"
+                        ? new AsyncData(Some(options.initialData.data))
+                        : new AsyncError(options.initialData.error);
+                return initialData;
             }
             if (options.cache !== false && cache.has(keyStr)) {
                 return cache.get(keyStr)!;
@@ -92,6 +116,10 @@ export function createValyn({
             return () => controllerRef.current?.abort();
         }, [keyStr]);
 
+        useEffect(() => {
+            observerRef.current.set(state);
+        }, [state]);
+
         if (options.watch) {
             useEffect(() => {
                 if (isClient) doFetch();
@@ -115,17 +143,23 @@ export function createValyn({
             });
         };
 
-        return [state, refetch, setData];
+        return [state, refetch, setData, observerRef.current.listenable()];
     };
 }
 
 export function useValync<T>(
     key: string | Record<string, any>,
     options: ValyncOptions<T> = {},
-): [AsyncValue<T>, () => void, (updater: (prev: T | null) => T) => void] {
+): [
+    AsyncValue<T>,
+    () => void,
+    (updater: (prev: T | null) => T) => void,
+    Listenable<T>,
+] {
     const keyStr = normalizeKey(key);
     const controllerRef = useRef<AbortController>(null);
 
+    const observerRef = useRef(new AsyncObserver<T>(new AsyncData<T>(None)));
     const [state, setState] = useState<AsyncValue<T>>(() => {
         if (options.initialData) {
             return options.initialData.status === "success"
@@ -217,6 +251,10 @@ export function useValync<T>(
         return () => controllerRef.current?.abort();
     }, [keyStr]);
 
+    useEffect(() => {
+        observerRef.current.set(state);
+    }, [state]);
+
     if (options.watch) {
         useEffect(() => {
             if (isClient) doFetch();
@@ -238,5 +276,5 @@ export function useValync<T>(
         });
     };
 
-    return [state, refetch, setData];
+    return [state, refetch, setData, observerRef.current.listenable()];
 }

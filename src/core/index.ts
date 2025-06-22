@@ -41,25 +41,56 @@ export type Handler<T, R> = {
     data?: (value: Option<T>) => R;
 };
 
-// Base abstract class for async stZte
+// --- Listener support ---
+export type StateListener<T> = (val: AsyncValue<T>) => void;
+export interface Listenable<T> {
+    listen: (fn: StateListener<T>) => () => void;
+}
+
+export class AsyncObserver<T> {
+    constructor(private _current: AsyncValue<T>) {}
+    private listeners = new Set<(val: AsyncValue<T>) => void>();
+
+    public listen(fn: StateListener<T>) {
+        fn(this._current);
+        this.listeners.add(fn);
+        return () => this.listeners.delete(fn);
+    }
+
+    public listenable() {
+        return {
+            listen: (fn: StateListener<T>) => {
+                this.listeners.add(fn);
+                return () => this.listeners.delete(fn);
+            },
+        };
+    }
+
+    public set(val: AsyncValue<T>) {
+        this._current = val;
+        this.listeners.forEach((fn) => fn(val));
+    }
+}
+
+// Base abstract class for async state
 export abstract class AsyncValue<T> {
     abstract when<R>(handlers: Handler<T, R>): R;
 
-    isLoading() {
+    isLoading(): this is AsyncLoading {
         return this instanceof AsyncLoading;
     }
 
-    isData() {
+    isData(): this is AsyncData<T> {
         return this instanceof AsyncData;
     }
 
-    isError() {
+    isError(): this is AsyncError {
         return this instanceof AsyncError;
     }
 }
 
 // Represents loading state
-export class AsyncLoading<T> extends AsyncValue<T> {
+export class AsyncLoading<T = unknown> extends AsyncValue<T> {
     when<R>(h: Handler<T, R>): R {
         return h.loading ? h.loading() : undefined;
     }

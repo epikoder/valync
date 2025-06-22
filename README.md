@@ -117,7 +117,7 @@ const [state, onLogin] = useValync("/api/auth", {
         body: JSON.stringify({ email, password }),
     },
 });
-````
+```
 
 ### Vue 3
 
@@ -132,7 +132,7 @@ export default {
         });
 
         const userDisplay = computed(() =>
-            state.value.when({
+            state.when({
                 loading: () => "Loading...",
                 error: (e) => `Error: ${e.message}`,
                 data: (opt) => (opt.some ? `${opt.val.name}` : "No user"),
@@ -143,6 +143,13 @@ export default {
     },
 };
 ```
+
+for use within template you can use `state.isLoading()`, `state.isData()` and `state.isError()`.
+
+### For more usage check the examples
+[React demo counter](https://github.com/epikoder/valync/tree/main/examples/valync-react-demo)
+
+[Vue demo counter](https://github.com/epikoder/valync/tree/main/examples/valync-vue-demo)
 
 ## Axios or other HTTP client
 

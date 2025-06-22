@@ -1,8 +1,12 @@
 {
     "name": "valync",
-    "version": "0.2.3",
+    "version": "0.2.4",
     "main": "dist/core/index.js",
     "types": "dist/core/index.d.ts",
+    "repository": {
+        "url": "https://github.com/epikoder/valync",
+        "type": "git"
+    },
     "exports": {
         ".": {
             "import": "./dist/core/index.js",
@@ -64,6 +68,8 @@
         "ts-results-es": "^5.0.1"
     },
     "devDependencies": {
+        "@testing-library/dom": "^10.4.0",
+        "@testing-library/react": "^16.3.0",
         "@types/jest": "^30.0.0",
         "@types/react": "^19.1.8",
         "jest": "^30.0.2",
