@@ -37,7 +37,10 @@ export function createValyn({
         Listenable<T>,
     ] {
         options.init.value = options.init.value || {};
-        Object.assign(options.init.value.headers, _options.headers);
+        options.init.value = {
+            ...options.init.value,
+            headers: { ...options.init.value.headers, ..._options.headers },
+        };
         options.cache = options.cache ?? _options.cache;
         options.retryCount = options.retryCount ?? _options.retryCount;
         options.fetchOnMount = options.fetchOnMount ?? _options.fetchOnMount;
