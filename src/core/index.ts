@@ -52,9 +52,11 @@ export type Handler<T, R> = {
     data?: (value: Option<T>) => R;
 };
 
+export type RequestMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
+
 // --- Listener support ---
 export type StateListener<T> = (val: AsyncValue<T>) => void;
-export interface Listenable<T> {
+export interface Observer<T> {
     listen: (fn: StateListener<T>) => () => void;
 }
 
@@ -68,7 +70,7 @@ export class AsyncObserver<T> {
         return () => this.listeners.delete(fn);
     }
 
-    public listenable() {
+    public observer() {
         return {
             listen: (fn: StateListener<T>) => {
                 this.listeners.add(fn);

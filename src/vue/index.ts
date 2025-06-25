@@ -8,9 +8,10 @@ import {
     AsyncError,
     AsyncData,
     ValyncOptions,
-    Listenable,
+    Observer,
     AsyncObserver,
     CacheKey,
+    RequestMethod,
 } from "../core";
 
 const cache = new Map<string, AsyncData<any>>();
@@ -35,7 +36,7 @@ export function createValyn({
         Ref<AsyncValue<T>>,
         () => void,
         (updater: (prev: T | null) => T) => void,
-        Listenable<T>,
+        Observer<T>,
     ] {
         let intervalId: number | undefined;
         const initRef = options.init ?? ref<RequestInit>({});
@@ -73,7 +74,7 @@ export function createValyn({
             typeof window !== "undefined" &&
             typeof AbortController !== "undefined";
 
-        const doFetch = () => {
+        const doFetch = (method?: RequestMethod, body?: BodyInit) => {
             controller.value?.abort();
             controller.value = new AbortController();
 
@@ -87,6 +88,11 @@ export function createValyn({
             const attempt = (tries: number) => {
                 client(typeof key === "string" ? key : keyStr, {
                     ...options.init.value,
+                    method:
+                        method ??
+                        options.init.value?.method ??
+                        (body ? "POST" : "GET"),
+                    body: body ?? options.init.value?.body,
                     signal: controller.value!.signal,
                 })
                     .then((res) => {
@@ -146,15 +152,26 @@ export function createValyn({
         }
 
         if (isClient && options.watch && options.watch.length > 0) {
-            watch(options.watch, doFetch);
+            watch(options.watch, () => doFetch());
         }
 
         watch(state, () => {
             observerRef.value.set(state.value);
         });
 
-        const refetch = () => {
-            if (isClient) doFetch();
+        const fetchFn = (
+            methodOrOpts?:
+                | RequestMethod
+                | { method?: RequestMethod; body?: BodyInit },
+            body?: BodyInit,
+        ) => {
+            if (!isClient) return;
+
+            if (typeof methodOrOpts === "string") {
+                doFetch(methodOrOpts, body);
+            } else {
+                doFetch(methodOrOpts?.method, methodOrOpts?.body);
+            }
         };
 
         const setData = (updater: (prev: T | null) => T) => {
@@ -169,12 +186,7 @@ export function createValyn({
             state.value = newVal;
         };
 
-        return [
-            state,
-            refetch,
-            setData,
-            observerRef.value.listenable(),
-        ] as const;
+        return [state, fetchFn, setData, observerRef.value.observer()] as const;
     };
 }
 
@@ -201,7 +213,7 @@ export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
     const isClient =
         typeof window !== "undefined" && typeof AbortController !== "undefined";
 
-    const doFetch = () => {
+    const doFetch = (method?: RequestMethod, body?: BodyInit) => {
         controller.value?.abort();
         controller.value = new AbortController();
 
@@ -215,6 +227,11 @@ export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
         const attempt = (tries: number) => {
             fetch(typeof key === "string" ? key : keyStr, {
                 ...options.init.value,
+                method:
+                    method ??
+                    options.init.value?.method ??
+                    (body ? "POST" : "GET"),
+                body: body ?? options.init.value?.body,
                 signal: controller.value!.signal,
             })
                 .then(async (resp): Promise<ApiResponse<T>> => {
@@ -305,15 +322,26 @@ export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
     }
 
     if (isClient && options.watch && options.watch.length > 0) {
-        watch(options.watch, doFetch);
+        watch(options.watch, () => doFetch());
     }
 
     watch(state, () => {
         observer.value.set(state.value);
     });
 
-    const refetch = () => {
-        if (isClient) doFetch();
+    const fetchFn = (
+        methodOrOpts?:
+            | RequestMethod
+            | { method?: RequestMethod; body?: BodyInit },
+        body?: BodyInit,
+    ) => {
+        if (!isClient) return;
+
+        if (typeof methodOrOpts === "string") {
+            doFetch(methodOrOpts, body);
+        } else {
+            doFetch(methodOrOpts?.method, methodOrOpts?.body);
+        }
     };
 
     const setData = (updater: (prev: T | null) => T) => {
@@ -328,5 +356,5 @@ export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
         state.value = newVal;
     };
 
-    return [state, refetch, setData, observer.value.listenable()] as const;
+    return [state, fetchFn, setData, observer.value.observer()] as const;
 }

@@ -8,9 +8,10 @@ import {
     AsyncError,
     AsyncData,
     ValyncOptions,
-    Listenable,
+    Observer,
     AsyncObserver,
     CacheKey,
+    RequestMethod,
 } from "../core";
 
 const cache = new Map<string, AsyncData<any>>();
@@ -32,7 +33,7 @@ export function createValyn({
         AsyncValue<T>,
         () => void,
         (updater: (prev: T | null) => T) => void,
-        Listenable<T>,
+        Observer<T>,
     ] {
         options.init = options.init || {};
         options.init = {
@@ -67,7 +68,7 @@ export function createValyn({
             typeof window !== "undefined" &&
             typeof AbortController !== "undefined";
 
-        const doFetch = () => {
+        const doFetch = (method?: RequestMethod, body?: BodyInit) => {
             controllerRef.current?.abort();
             const ctrl = new AbortController();
             controllerRef.current = ctrl;
@@ -82,6 +83,11 @@ export function createValyn({
             const attempt = (tries: number) => {
                 client(typeof key === "string" ? key : keyStr, {
                     ...options.init,
+                    method:
+                        method ??
+                        options.init?.method ??
+                        (body ? "POST" : "GET"),
+                    body: body ?? options.init?.body,
                     signal: ctrl.signal,
                 })
                     .then((res) => {
@@ -142,8 +148,19 @@ export function createValyn({
             return () => clearInterval(intervalId);
         }, [options.fetchInterval, isClient]);
 
-        const refetch = () => {
-            if (isClient) doFetch();
+        const fetchFn = (
+            methodOrOpts?:
+                | RequestMethod
+                | { method?: RequestMethod; body?: BodyInit },
+            body?: BodyInit,
+        ) => {
+            if (!isClient) return;
+
+            if (typeof methodOrOpts === "string") {
+                doFetch(methodOrOpts, body);
+            } else {
+                doFetch(methodOrOpts?.method, methodOrOpts?.body);
+            }
         };
 
         const setData = (updater: (prev: T | null) => T) => {
@@ -159,7 +176,7 @@ export function createValyn({
             });
         };
 
-        return [state, refetch, setData, observerRef.current.listenable()];
+        return [state, fetchFn, setData, observerRef.current.observer()];
     };
 }
 
@@ -170,7 +187,7 @@ export function useValync<T>(
     AsyncValue<T>,
     () => void,
     (updater: (prev: T | null) => T) => void,
-    Listenable<T>,
+    Observer<T>,
 ] {
     const keyStr = normalizeKey(key);
     const controllerRef = useRef<AbortController>(null);
@@ -191,7 +208,7 @@ export function useValync<T>(
     const isClient =
         typeof window !== "undefined" && typeof AbortController !== "undefined";
 
-    const doFetch = () => {
+    const doFetch = (method?: RequestMethod, body?: BodyInit) => {
         controllerRef.current?.abort();
         const ctrl = new AbortController();
         controllerRef.current = ctrl;
@@ -206,6 +223,9 @@ export function useValync<T>(
         const attempt = (tries: number) => {
             fetch(typeof key === "string" ? key : keyStr, {
                 ...options.init,
+                method:
+                    method ?? options.init?.method ?? (body ? "POST" : "GET"),
+                body: body ?? options.init?.body,
                 signal: ctrl.signal,
             })
                 .then(async (resp): Promise<ApiResponse<T>> => {
@@ -303,8 +323,19 @@ export function useValync<T>(
         return () => clearInterval(intervalId);
     }, [options.fetchInterval, isClient]);
 
-    const refetch = () => {
-        if (isClient) doFetch();
+    const fetchFn = (
+        methodOrOpts?:
+            | RequestMethod
+            | { method?: RequestMethod; body?: BodyInit },
+        body?: BodyInit,
+    ) => {
+        if (!isClient) return;
+
+        if (typeof methodOrOpts === "string") {
+            doFetch(methodOrOpts, body);
+        } else {
+            doFetch(methodOrOpts?.method, methodOrOpts?.body);
+        }
     };
 
     const setData = (updater: (prev: T | null) => T) => {
@@ -318,5 +349,5 @@ export function useValync<T>(
         });
     };
 
-    return [state, refetch, setData, observerRef.current.listenable()];
+    return [state, fetchFn, setData, observerRef.current.observer()];
 }
