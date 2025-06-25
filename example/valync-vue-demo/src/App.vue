@@ -38,7 +38,9 @@ onMounted(() => {
             // alert(event.value.unwrap());
         }
     });
-    onUnmounted(() => unsubscribe());
+    onUnmounted(() => {
+        unsubscribe();
+    });
 });
 </script>
 
