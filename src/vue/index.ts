@@ -91,12 +91,14 @@ export function createValyn({
                 })
                     .then((res) => {
                         if (controller.value!.signal.aborted) return;
-                        if (res.status === "failed")
+                        if (res.status === "failed") {
+                            options.onError && options.onError(res.error);
                             state.value = new AsyncError(res.error);
-                        else {
+                        } else {
                             const data = options.onData
                                 ? options.onData(res.data)
                                 : res.data;
+                            options.onData && options.onData(data);
                             const sd = new AsyncData(Some(data));
                             if (options.cache !== false) cache.set(keyStr, sd);
                             state.value = sd;
@@ -105,6 +107,13 @@ export function createValyn({
                     .catch((err) => {
                         if (controller.value!.signal.aborted) return;
                         if (tries > 0) return attempt(tries - 1);
+                        options.onError &&
+                            options.onError({
+                                name: "NetworkError",
+                                message: err.message,
+                                code: "500",
+                            });
+
                         state.value = new AsyncError({
                             name: "NetworkError",
                             message: err.message,
@@ -137,7 +146,7 @@ export function createValyn({
         }
 
         if (isClient && options.watch && options.watch.length > 0) {
-            watch(() => options.watch, doFetch);
+            watch(options.watch, doFetch);
         }
 
         watch(state, () => {
@@ -213,6 +222,11 @@ export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
                     try {
                         json = await resp.json();
                     } catch {
+                        options.onError &&
+                            options.onError({
+                                name: "ParseError",
+                                message: "Invalid JSON",
+                            });
                         return {
                             status: "failed",
                             error: {
@@ -222,9 +236,17 @@ export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
                         };
                     }
                     if (!resp.ok || json.status === "failed") {
+                        options.onError &&
+                            options.onError(
+                                json?.error ?? {
+                                    name: "HttpError",
+                                    message: resp.statusText,
+                                    code: resp.status,
+                                },
+                            );
                         return {
                             status: "failed",
-                            error: json.error ?? {
+                            error: json?.error ?? {
                                 name: "HttpError",
                                 message: resp.statusText,
                                 code: resp.status,
@@ -241,6 +263,7 @@ export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
                         const data = options.onData
                             ? options.onData(res.data)
                             : res.data;
+                        options.onSuccess && options.onSuccess(data);
                         const sd = new AsyncData(Some(data));
                         if (options.cache !== false) cache.set(keyStr, sd);
                         state.value = sd;
@@ -249,6 +272,11 @@ export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
                 .catch((err) => {
                     if (controller.value!.signal.aborted) return;
                     if (tries > 0) return attempt(tries - 1);
+                    options.onError &&
+                        options.onError({
+                            name: "NetworkError",
+                            message: err.message,
+                        });
                     state.value = new AsyncError({
                         name: "NetworkError",
                         message: err.message,
@@ -277,7 +305,7 @@ export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
     }
 
     if (isClient && options.watch && options.watch.length > 0) {
-        watch(() => options.watch, doFetch);
+        watch(options.watch, doFetch);
     }
 
     watch(state, () => {

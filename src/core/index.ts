@@ -10,6 +10,8 @@ export type ValyncOptions<T> = {
     watch?: any[];
     initialData?: ApiResponse<T>;
     fetchInterval?: number;
+    onSuccess?: (data: T) => void;
+    onError?: (err: ApiErrorResponse["error"]) => void;
 };
 
 // Type for cache key

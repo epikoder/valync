@@ -8,7 +8,6 @@ import {
     AsyncError,
     AsyncData,
     ValyncOptions,
-    StateListener,
     Listenable,
     AsyncObserver,
     CacheKey,
@@ -89,12 +88,14 @@ export function createValyn({
                         if (ctrl.signal.aborted) return;
                         if (res.status == "failed") {
                             setState(new AsyncError(res.error));
+                            options.onError && options.onError(res.error);
                             return;
                         }
 
                         const data: T = options.onData
                             ? options.onData(res.data)
                             : res.data;
+                        options.onSuccess && options.onSuccess(data);
                         const sd = new AsyncData(Some(data));
                         if (options.cache !== false) cache.set(keyStr, sd);
                         setState(sd);
@@ -102,6 +103,11 @@ export function createValyn({
                     .catch((err) => {
                         if (ctrl.signal.aborted) return;
                         if (tries > 0) return attempt(tries - 1);
+                        options.onError &&
+                            options.onError({
+                                name: "NetworkError",
+                                message: err.message,
+                            });
                         setState(
                             new AsyncError({
                                 name: "NetworkError",
@@ -207,6 +213,11 @@ export function useValync<T>(
                     try {
                         json = await resp.json();
                     } catch {
+                        options.onError &&
+                            options.onError({
+                                name: "ParseError",
+                                message: "Invalid JSON",
+                            });
                         return {
                             status: "failed",
                             error: {
@@ -216,9 +227,17 @@ export function useValync<T>(
                         };
                     }
                     if (!resp.ok || json.status === "failed") {
+                        options.onError &&
+                            options.onError(
+                                json?.error ?? {
+                                    name: "HttpError",
+                                    message: resp.statusText,
+                                    code: resp.status,
+                                },
+                            );
                         return {
                             status: "failed",
-                            error: json.error ?? {
+                            error: json?.error ?? {
                                 name: "HttpError",
                                 message: resp.statusText,
                                 code: resp.status,
@@ -229,13 +248,15 @@ export function useValync<T>(
                 })
                 .then((res) => {
                     if (ctrl.signal.aborted) return;
-                    if (res.status === "failed")
+                    if (res.status === "failed") {
+                        options.onError && options.onError(res.error);
                         setState(new AsyncError(res.error));
-                    else {
+                    } else {
                         const data = options.onData
                             ? options.onData(res.data)
                             : res.data;
                         const sd = new AsyncData(Some(data));
+                        options.onSuccess && options.onSuccess(data);
                         if (options.cache !== false) cache.set(keyStr, sd);
                         setState(sd);
                     }
@@ -243,6 +264,11 @@ export function useValync<T>(
                 .catch((err) => {
                     if (ctrl.signal.aborted) return;
                     if (tries > 0) return attempt(tries - 1);
+                    options.onError &&
+                        options.onError({
+                            name: "NetworkError",
+                            message: err.message,
+                        });
                     setState(
                         new AsyncError({
                             name: "NetworkError",
