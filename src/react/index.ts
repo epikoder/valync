@@ -126,7 +126,7 @@ export function createValyn({
         useEffect(() => {
             if (!options.watch) return;
             if (isClient) doFetch();
-        }, [...options.watch]);
+        }, [...(options.watch ?? [])]);
 
         useEffect(() => {
             if (!options.fetchInterval || !isClient) return;
@@ -267,7 +267,7 @@ export function useValync<T>(
     useEffect(() => {
         if (!options.watch) return;
         if (isClient) doFetch();
-    }, [...options.watch]);
+    }, [...(options.watch ?? [])]);
 
     useEffect(() => {
         if (!options.fetchInterval || !isClient) return;
