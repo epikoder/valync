@@ -31,7 +31,15 @@ export function createValyn({
         options: ValyncOptions<T> = {},
     ): [
         AsyncValue<T>,
-        () => void,
+        (
+            methodOrOpts?:
+                | RequestMethod
+                | {
+                      method?: RequestMethod;
+                      body?: BodyInit;
+                  },
+            body?: BodyInit,
+        ) => void,
         (updater: (prev: T | null) => T) => void,
         Observer<T>,
     ] {
@@ -185,7 +193,15 @@ export function useValync<T>(
     options: ValyncOptions<T> = {},
 ): [
     AsyncValue<T>,
-    () => void,
+    (
+        methodOrOpts?:
+            | RequestMethod
+            | {
+                  method?: RequestMethod;
+                  body?: BodyInit;
+              },
+        body?: BodyInit,
+    ) => void,
     (updater: (prev: T | null) => T) => void,
     Observer<T>,
 ] {
