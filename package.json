@@ -1,6 +1,6 @@
 {
     "name": "valync",
-    "version": "0.2.7",
+    "version": "0.2.8",
     "main": "dist/core/index.js",
     "types": "dist/core/index.d.ts",
     "repository": {

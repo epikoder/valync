@@ -6,18 +6,26 @@ export type ValyncOptions<T> = {
     cache?: boolean;
     fetchOnMount?: boolean;
     retryCount?: number;
-    onData?: (data: T) => T;
+    onData?: (data: any) => T;
     watch?: any[];
     initialData?: ApiResponse<T>;
     fetchInterval?: number;
 };
 
 // Type for cache key
-export type CacheKey = string | Record<string, any>;
+export type CacheKey =
+    | string
+    | ({
+          url: string;
+      } & Record<string, any>);
 
 // Normalize cache key (convert object to stable string)
 export function normalizeKey(key: CacheKey): string {
-    return typeof key === "string" ? key : JSON.stringify(key);
+    if (typeof key === "string") return key;
+
+    const { url, ...params } = key;
+    const search = new URLSearchParams(params as Record<string, string>);
+    return `${url}?${search.toString()}`;
 }
 
 // API Response standardization

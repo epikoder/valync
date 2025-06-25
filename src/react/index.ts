@@ -11,6 +11,7 @@ import {
     StateListener,
     Listenable,
     AsyncObserver,
+    CacheKey,
 } from "../core";
 
 const cache = new Map<string, AsyncData<any>>();
@@ -26,7 +27,7 @@ export function createValyn({
     > & { headers?: HeadersInit };
 }) {
     return function useValynHook<T>(
-        key: string | Record<string, any>,
+        key: CacheKey,
         options: ValyncOptions<T> = {},
     ): [
         AsyncValue<T>,
@@ -157,7 +158,7 @@ export function createValyn({
 }
 
 export function useValync<T>(
-    key: string | Record<string, any>,
+    key: CacheKey,
     options: ValyncOptions<T> = {},
 ): [
     AsyncValue<T>,

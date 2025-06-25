@@ -10,6 +10,7 @@ import {
     ValyncOptions,
     Listenable,
     AsyncObserver,
+    CacheKey,
 } from "../core";
 
 const cache = new Map<string, AsyncData<any>>();
@@ -28,7 +29,7 @@ export function createValyn({
     > & { headers?: HeadersInit };
 }) {
     return function <T>(
-        key: string | Record<string, any>,
+        key: CacheKey,
         options: ValyncVueOptions<T> = {},
     ): [
         Ref<AsyncValue<T>>,
@@ -168,10 +169,7 @@ export function createValyn({
     };
 }
 
-export function useValync<T>(
-    key: string | Record<string, any>,
-    options: ValyncVueOptions<T> = {},
-) {
+export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
     let intervalId: number | undefined;
     const keyStr = normalizeKey(key);
     const controller = ref<AbortController>();
