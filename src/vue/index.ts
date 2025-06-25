@@ -1,4 +1,4 @@
-import { ref, onMounted, watch, Ref } from "vue";
+import { ref, onMounted, watch, Ref, onUnmounted } from "vue";
 import { Some, None } from "ts-results-es";
 import {
     normalizeKey,
@@ -36,7 +36,12 @@ export function createValyn({
         (updater: (prev: T | null) => T) => void,
         Listenable<T>,
     ] {
-        options.init.value = options.init.value || {};
+        let intervalId: number | undefined;
+        const initRef = options.init ?? ref<RequestInit>({});
+        initRef.value = {
+            ...initRef.value,
+            headers: { ...initRef.value.headers, ..._options.headers },
+        };
         options.init.value = {
             ...options.init.value,
             headers: { ...options.init.value.headers, ..._options.headers },
@@ -110,16 +115,28 @@ export function createValyn({
             attempt(options.retryCount ?? 0);
         };
 
-        if (
-            isClient &&
-            options.fetchOnMount !== false &&
-            !options.initialData
-        ) {
-            onMounted(doFetch);
+        if (isClient) {
+            onMounted(() => {
+                if (options.fetchOnMount !== false && !options.initialData) {
+                    doFetch();
+                }
+
+                if (options.fetchInterval) {
+                    intervalId = window.setInterval(
+                        doFetch,
+                        options.fetchInterval,
+                    );
+                }
+            });
+
+            onUnmounted(() => {
+                controller.value?.abort();
+                if (intervalId) clearInterval(intervalId);
+            });
         }
 
         if (isClient && options.watch && options.watch.length > 0) {
-            watch(options.watch, doFetch);
+            watch(() => options.watch, doFetch);
         }
 
         watch(state, () => {
@@ -155,6 +172,7 @@ export function useValync<T>(
     key: string | Record<string, any>,
     options: ValyncVueOptions<T> = {},
 ) {
+    let intervalId: number | undefined;
     const keyStr = normalizeKey(key);
     const controller = ref<AbortController>();
 
@@ -243,12 +261,25 @@ export function useValync<T>(
         attempt(options.retryCount ?? 0);
     };
 
-    if (isClient && options.fetchOnMount !== false && !options.initialData) {
-        onMounted(doFetch);
+    if (isClient) {
+        onMounted(() => {
+            if (options.fetchOnMount !== false && !options.initialData) {
+                doFetch();
+            }
+
+            if (options.fetchInterval) {
+                intervalId = window.setInterval(doFetch, options.fetchInterval);
+            }
+        });
+
+        onUnmounted(() => {
+            controller.value?.abort();
+            if (intervalId) clearInterval(intervalId);
+        });
     }
 
     if (isClient && options.watch && options.watch.length > 0) {
-        watch(options.watch, doFetch);
+        watch(() => options.watch, doFetch);
     }
 
     watch(state, () => {

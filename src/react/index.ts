@@ -123,11 +123,17 @@ export function createValyn({
             observerRef.current.set(state);
         }, [state]);
 
-        if (options.watch) {
-            useEffect(() => {
-                if (isClient) doFetch();
-            }, options.watch);
-        }
+        useEffect(() => {
+            if (!options.watch) return;
+            if (isClient) doFetch();
+        }, [...options.watch]);
+
+        useEffect(() => {
+            if (!options.fetchInterval || !isClient) return;
+
+            const intervalId = setInterval(doFetch, options.fetchInterval);
+            return () => clearInterval(intervalId);
+        }, [options.fetchInterval, isClient]);
 
         const refetch = () => {
             if (isClient) doFetch();
@@ -258,11 +264,17 @@ export function useValync<T>(
         observerRef.current.set(state);
     }, [state]);
 
-    if (options.watch) {
-        useEffect(() => {
-            if (isClient) doFetch();
-        }, options.watch);
-    }
+    useEffect(() => {
+        if (!options.watch) return;
+        if (isClient) doFetch();
+    }, [...options.watch]);
+
+    useEffect(() => {
+        if (!options.fetchInterval || !isClient) return;
+
+        const intervalId = setInterval(doFetch, options.fetchInterval);
+        return () => clearInterval(intervalId);
+    }, [options.fetchInterval, isClient]);
 
     const refetch = () => {
         if (isClient) doFetch();
