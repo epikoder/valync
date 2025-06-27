@@ -12,6 +12,7 @@
 - Reactive `watch` dependencies to refetch on data change
 - `setData()` for manual or partial UI updates
 - Uses a strict API response shape for uniform error & data handling
+- Flexible Mutations / Write operations to API
 
 ---
 
@@ -55,6 +56,9 @@ A hook/composable to fetch and manage async data.
   onData?: (data: T) => T; // transform data before setting
   watch?: any[]; // reactive dependencies to trigger refetch
   initialData?: ApiResponse<T>; // initial server-side data for hydration
+  fetchInterval?: number;
+  onSuccess?: (data: T) => void;
+  onError?: (err: ApiErrorResponse["error"]) => void;
 }
 ```
 
@@ -147,6 +151,7 @@ export default {
 for use within template you can use `state.isLoading()`, `state.isData()` and `state.isError()`.
 
 ### For more usage check the examples
+
 [React demo counter](https://github.com/epikoder/valync/tree/main/examples/valync-react-demo)
 
 [Vue demo counter](https://github.com/epikoder/valync/tree/main/examples/valync-vue-demo)
@@ -159,7 +164,7 @@ import { createValyn } from "valync/react";
 
 const useAxiosValync = createValyn({
     client: async (url, init) =>
-        await axios({ url, ...init }).then((res) => res.data), // transforms to data
+        await axios({ url, ...init }).then((res) => {"status": "success"; "data": res.data}), // transforms to data
 });
 
 // use in a component

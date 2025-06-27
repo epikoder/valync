@@ -19,6 +19,25 @@ const cache = new Map<string, AsyncData<any>>();
 export type ValyncVueOptions<T> = Omit<ValyncOptions<T>, "init"> & {
     init?: Ref<RequestInit>;
 };
+
+/**
+ * createValyn creates a custom `useValync` hook bound to a provided HTTP client function.
+ * Useful for plugging in your own fetch logic or a library like axios.
+ *
+ * ⚠️ NOTE:
+ * Your `client()` function MUST return a Promise resolving to:
+ *
+ *    ApiResponse<any>
+ *
+ *    {
+ *      status: "success" | "failed",
+ *      data?: T,
+ *      error?: { name: string; message: string; code?: number }
+ *    }
+ *
+ * use `onData` to apply transformation from `any => T` for individual endpoint when neccessary.
+ * Returning a plain array or object without the `status` field will cause issues.
+ */
 export function createValyn({
     client,
     options: _options = {},
@@ -105,6 +124,21 @@ export function createValyn({
                 })
                     .then((res) => {
                         if (controller.value!.signal.aborted) return;
+
+                        // DEV-ONLY: Validate ApiResponse<T> shape
+                        if (
+                            process.env.NODE_ENV !== "production" &&
+                            (typeof res !== "object" ||
+                                !("status" in res) ||
+                                (res.status !== "success" &&
+                                    res.status !== "failed"))
+                        ) {
+                            console.warn(
+                                `[Valync] Expected ApiResponse<T> format missing from client() response. Got:`,
+                                res,
+                            );
+                        }
+
                         if (res.status === "failed") {
                             options.onError && options.onError(res.error);
                             state.value = new AsyncError(res.error);
@@ -198,6 +232,24 @@ export function createValyn({
     };
 }
 
+/**
+ * useValync is a client-side data fetching hook that provides async state management
+ * with caching, optimistic updates, and reactive watching support.
+ *
+ * ⚠️ NOTE:
+ * Your server MUST return a JSON response of the shape:
+ *
+ *    ApiResponse<T> | ApiResponse<any>
+ *
+ *    {
+ *      status: "success" | "failed",
+ *      data?: T,
+ *      error?: { name: string; message: string; code?: number }
+ *    }
+ *
+ * Use `onData` if `res.data` does not match your expected frontend type or if you wish to apply transformation,
+ * so returning a plain array or object without the `status` field will cause issues.
+ */
 export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
     let intervalId: number | undefined;
     const keyStr = normalizeKey(key);
@@ -247,11 +299,6 @@ export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
                     try {
                         json = await resp.json();
                     } catch {
-                        options.onError &&
-                            options.onError({
-                                name: "ParseError",
-                                message: "Invalid JSON",
-                            });
                         return {
                             status: "failed",
                             error: {
@@ -260,15 +307,22 @@ export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
                             },
                         };
                     }
+
+                    // DEV-ONLY: Validate ApiResponse format
+                    if (
+                        process.env.NODE_ENV !== "production" &&
+                        (typeof json !== "object" ||
+                            !("status" in json) ||
+                            (json.status !== "success" &&
+                                json.status !== "failed"))
+                    ) {
+                        console.warn(
+                            `[Valync] Expected ApiResponse<T> format missing. Got:`,
+                            json,
+                        );
+                    }
+
                     if (!resp.ok || json.status === "failed") {
-                        options.onError &&
-                            options.onError(
-                                json?.error ?? {
-                                    name: "HttpError",
-                                    message: resp.statusText,
-                                    code: resp.status,
-                                },
-                            );
                         return {
                             status: "failed",
                             error: json?.error ?? {
