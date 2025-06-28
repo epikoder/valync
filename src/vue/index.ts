@@ -209,6 +209,7 @@ export function createValyn({
         ) => {
             if (!isClient) return;
 
+            cache.delete(normalizeKey(keyStr));
             if (typeof methodOrOpts === "string") {
                 doFetch(methodOrOpts, body);
             } else {
@@ -399,6 +400,7 @@ export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
     ) => {
         if (!isClient) return;
 
+        cache.delete(normalizeKey(keyStr));
         if (typeof methodOrOpts === "string") {
             doFetch(methodOrOpts, body);
         } else {
