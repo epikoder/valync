@@ -125,7 +125,7 @@ export function createValyn({
                     .then((res) => {
                         if (controller.value!.signal.aborted) return;
 
-                        // DEV-ONLY: Validate ApiResponse<T> shape
+                        // DEV-ONLY: Validate ApiResponse<T> format
                         if (
                             process.env.NODE_ENV !== "production" &&
                             (typeof res !== "object" ||
@@ -143,10 +143,8 @@ export function createValyn({
                             options.onError && options.onError(res.error);
                             state.value = new AsyncError(res.error);
                         } else {
-                            const data = options.onData
-                                ? options.onData(res.data)
-                                : res.data;
-                            options.onData && options.onData(data);
+                            const data = options.onData?.(res.data) ?? res.data;
+                            options.onSuccess?.(data);
                             const sd = new AsyncData(Some(data));
                             if (options.cache !== false) cache.set(keyStr, sd);
                             state.value = sd;
@@ -155,12 +153,11 @@ export function createValyn({
                     .catch((err) => {
                         if (controller.value!.signal.aborted) return;
                         if (tries > 0) return attempt(tries - 1);
-                        options.onError &&
-                            options.onError({
-                                name: "NetworkError",
-                                message: err.message,
-                                code: "500",
-                            });
+                        options.onError?.({
+                            name: "NetworkError",
+                            message: err.message,
+                            code: "500",
+                        });
 
                         state.value = new AsyncError({
                             name: "NetworkError",
@@ -340,10 +337,8 @@ export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
                     if (res.status === "failed")
                         state.value = new AsyncError(res.error);
                     else {
-                        const data = options.onData
-                            ? options.onData(res.data)
-                            : res.data;
-                        options.onSuccess && options.onSuccess(data);
+                        const data = options.onData?.(res.data) ?? res.data;
+                        options.onSuccess?.(data);
                         const sd = new AsyncData(Some(data));
                         if (options.cache !== false) cache.set(keyStr, sd);
                         state.value = sd;
@@ -352,11 +347,11 @@ export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
                 .catch((err) => {
                     if (controller.value!.signal.aborted) return;
                     if (tries > 0) return attempt(tries - 1);
-                    options.onError &&
-                        options.onError({
-                            name: "NetworkError",
-                            message: err.message,
-                        });
+
+                    options.onError?.({
+                        name: "NetworkError",
+                        message: err.message,
+                    });
                     state.value = new AsyncError({
                         name: "NetworkError",
                         message: err.message,

@@ -140,9 +140,7 @@ export function createValyn({
                             return;
                         }
 
-                        const data: T = options.onData
-                            ? options.onData(res.data)
-                            : res.data;
+                        const data = options.onData?.(res.data) ?? res.data;
                         options.onSuccess?.(data);
                         const sd = new AsyncData(Some(data));
                         if (options.cache !== false) cache.set(keyStr, sd);
@@ -344,9 +342,7 @@ export function useValync<T>(
                         options.onError?.(res.error);
                         setState(new AsyncError(res.error));
                     } else {
-                        const data = options.onData
-                            ? options.onData(res.data)
-                            : res.data;
+                        const data = options.onData?.(res.data) ?? res.data;
                         const sd = new AsyncData(Some(data));
                         options.onSuccess?.(data);
                         if (options.cache !== false) cache.set(keyStr, sd);
