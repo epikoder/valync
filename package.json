@@ -1,82 +1,83 @@
 {
-    "name": "valync",
-    "version": "0.3.2",
-    "main": "dist/core/index.js",
-    "types": "dist/core/index.d.ts",
-    "repository": {
-        "url": "https://github.com/epikoder/valync",
-        "type": "git"
-    },
-    "exports": {
-        ".": {
-            "import": "./dist/core/index.js",
-            "types": "./dist/core/index.d.ts"
-        },
-        "./react": {
-            "import": "./dist/react/index.js",
-            "types": "./dist/react/index.d.ts"
-        },
-        "./vue": {
-            "import": "./dist/vue/index.js",
-            "types": "./dist/vue/index.d.ts"
-        }
-    },
-    "files": [
-        "dist"
-    ],
-    "keywords": [
-        "valync",
-        "riverpod",
-        "riverpod-js",
-        "async",
-        "async-data",
-        "async-state",
-        "state-management",
-        "data-fetching",
-        "api-response",
-        "cache",
-        "error-handling",
-        "abortcontroller",
-        "option-result",
-        "ts-results",
-        "typescript",
-        "client-side",
-        "promise-wrapper",
-        "http-client",
-        "react",
-        "react-hook",
-        "react-async",
-        "vue",
-        "vue3",
-        "vue-async",
-        "vue-composition-api",
-        "lightweight",
-        "monorepo",
-        "frontend-utils",
-        "data-hooks",
-        "custom-hook",
-        "swr",
-        "tanstack-query",
-        "epikoder"
-    ],
-    "scripts": {
-        "build": "tsc -b",
-        "prepublishOnly": "pnpm build",
-        "test": "jest"
-    },
-    "dependencies": {
-        "ts-results-es": "^5.0.1"
-    },
-    "devDependencies": {
-        "@testing-library/dom": "^10.4.0",
-        "@testing-library/react": "^16.3.0",
-        "@types/jest": "^30.0.0",
-        "@types/react": "^19.1.8",
-        "jest": "^30.0.2",
-        "ts-jest": "^29.4.0"
-    },
-    "peerDependencies": {
-        "vue": "^3.0.0",
-        "react": "^18.0.0"
-    }
+	"name": "valync",
+	"version": "0.3.2",
+	"main": "dist/core/index.js",
+	"types": "dist/core/index.d.ts",
+	"repository": {
+		"url": "https://github.com/epikoder/valync",
+		"type": "git"
+	},
+	"exports": {
+		".": {
+			"import": "./dist/core/index.js",
+			"types": "./dist/core/index.d.ts"
+		},
+		"./react": {
+			"import": "./dist/react/index.js",
+			"types": "./dist/react/index.d.ts"
+		},
+		"./vue": {
+			"import": "./dist/vue/index.js",
+			"types": "./dist/vue/index.d.ts"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"keywords": [
+		"valync",
+		"riverpod",
+		"riverpod-js",
+		"async",
+		"async-data",
+		"async-state",
+		"state-management",
+		"data-fetching",
+		"api-response",
+		"cache",
+		"error-handling",
+		"abortcontroller",
+		"option-result",
+		"ts-results",
+		"typescript",
+		"client-side",
+		"promise-wrapper",
+		"http-client",
+		"react",
+		"react-hook",
+		"react-async",
+		"vue",
+		"vue3",
+		"vue-async",
+		"vue-composition-api",
+		"lightweight",
+		"monorepo",
+		"frontend-utils",
+		"data-hooks",
+		"custom-hook",
+		"swr",
+		"tanstack-query",
+		"epikoder"
+	],
+	"scripts": {
+		"build": "tsc -b",
+		"prepublishOnly": "pnpm build",
+		"test": "jest"
+	},
+	"dependencies": {
+		"ts-results-es": "^5.0.1"
+	},
+	"devDependencies": {
+		"@types/node": "^25.0.3",
+		"@testing-library/dom": "^10.4.0",
+		"@testing-library/react": "^16.3.0",
+		"@types/jest": "^30.0.0",
+		"@types/react": "^19.1.8",
+		"jest": "^30.0.2",
+		"ts-jest": "^29.4.0"
+	},
+	"peerDependencies": {
+		"react": "^18.0.0",
+		"vue": "^3.0.0"
+	}
 }
