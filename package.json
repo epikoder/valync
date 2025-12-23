@@ -1,6 +1,6 @@
 {
 	"name": "valync",
-	"version": "0.3.3",
+	"version": "0.3.3-1",
 	"main": "dist/core/index.js",
 	"types": "dist/core/index.d.ts",
 	"repository": {
@@ -9,6 +9,10 @@
 	},
 	"exports": {
 		".": {
+			"import": "./dist/core/index.js",
+			"types": "./dist/core/index.d.ts"
+		},
+		"./core": {
 			"import": "./dist/core/index.js",
 			"types": "./dist/core/index.d.ts"
 		},
