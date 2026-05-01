@@ -1,4 +1,4 @@
-import { ref, onMounted, watch, Ref, onUnmounted } from "vue";
+import { ref, shallowRef, onMounted, watch, Ref, onUnmounted } from "vue";
 import { Some, None } from "ts-results-es";
 import {
 	normalizeKey,
@@ -12,6 +12,9 @@ import {
 	AsyncObserver,
 	CacheKey,
 	RequestMethod,
+	RequestBody,
+	buildRequestBody,
+	mergeHeaders,
 } from "../core/index";
 
 const cache = new Map<string, AsyncData<any>>();
@@ -20,33 +23,34 @@ export type ValyncVueOptions<T> = Omit<ValyncOptions<T>, "init"> & {
 	init?: Ref<RequestInit>;
 };
 
+export type CreateValynVueOptions = Pick<
+	ValyncOptions<any>,
+	"cache" | "retryCount" | "fetchOnMount"
+> & {
+	headers?: HeadersInit | (() => HeadersInit);
+	onError?: (err: {
+		name: string;
+		message: string;
+		code?: number | string;
+	}) => boolean | Promise<boolean>;
+};
+
 /**
- * createValyn creates a custom `useValync` hook bound to a provided HTTP client function.
+ * createValyn creates a custom `useValync` composable bound to a provided HTTP client function.
  * Useful for plugging in your own fetch logic or a library like axios.
  *
+ * The `options.onError` callback receives every API-level error. Returning `true` (or a
+ * Promise resolving to `true`) triggers a single retry — useful for token-refresh flows.
+ *
  * ⚠️ NOTE:
- * Your `client()` function MUST return a Promise resolving to:
- *
- *    ApiResponse<any>
- *
- *    {
- *      status: "success" | "failed",
- *      data?: T,
- *      error?: { name: string; message: string; code?: number }
- *    }
- *
- * use `onData` to apply transformation from `any => T` for individual endpoint when neccessary.
- * Returning a plain array or object without the `status` field will cause issues.
+ * Your `client()` function MUST return a Promise resolving to ApiResponse<any>.
  */
 export function createValyn({
 	client,
 	options: _options = {},
 }: {
 	client: (url: string, init: RequestInit) => Promise<ApiResponse<any>>;
-	options?: Pick<
-		ValyncOptions<any>,
-		"cache" | "retryCount" | "fetchOnMount"
-	> & { headers?: HeadersInit };
+	options?: CreateValynVueOptions;
 }) {
 	return function <T>(
 		key: CacheKey,
@@ -58,23 +62,27 @@ export function createValyn({
 				| RequestMethod
 				| {
 						method?: RequestMethod;
-						body?: BodyInit;
+						body?: RequestBody;
+						files?: File[] | [string, File][];
 				  },
-			body?: BodyInit,
+			body?: RequestBody,
+			files?: File[] | [string, File][],
 		) => void,
 		(updater: (prev: T | null) => T) => void,
 		Observer<T>,
 	] {
 		let intervalId: number | undefined;
-		const initRef = options.init ?? ref<RequestInit>({});
+
+		const initRef: Ref<RequestInit> = options.init ?? shallowRef({} as RequestInit);
+		const resolvedGlobalHeaders =
+			typeof _options.headers === "function"
+				? _options.headers()
+				: _options.headers;
 		initRef.value = {
 			...initRef.value,
-			headers: { ...initRef.value.headers, ..._options.headers },
+			headers: mergeHeaders(initRef.value.headers, resolvedGlobalHeaders),
 		};
-		options.init.value = {
-			...options.init.value,
-			headers: { ...options.init.value.headers, ..._options.headers },
-		};
+
 		options.cache = options.cache ?? _options.cache;
 		options.retryCount = options.retryCount ?? _options.retryCount;
 		options.fetchOnMount = options.fetchOnMount ?? _options.fetchOnMount;
@@ -100,7 +108,11 @@ export function createValyn({
 		const isClient =
 			typeof window !== "undefined" && typeof AbortController !== "undefined";
 
-		const doFetch = (method?: RequestMethod, body?: BodyInit) => {
+		const doFetch = (
+			method?: RequestMethod,
+			body?: RequestBody,
+			files?: File[] | [string, File][],
+		) => {
 			controller.value?.abort();
 			controller.value = new AbortController();
 
@@ -111,18 +123,38 @@ export function createValyn({
 
 			state.value = new AsyncLoading<T>();
 
+			const resolvedFiles = files ?? options.files;
+			const { body: resolvedBody, isMultipart } = buildRequestBody(
+				body ?? (initRef.value?.body as RequestBody | undefined),
+				resolvedFiles,
+			);
+
+			let globalRetryDone = false;
+
 			const attempt = (tries: number) => {
+				// Re-resolve dynamic global headers on every attempt (supports token refresh)
+				const freshGlobalHeaders =
+					typeof _options.headers === "function"
+						? _options.headers()
+						: _options.headers;
+				const merged = mergeHeaders(initRef.value?.headers, freshGlobalHeaders);
+				if (!isMultipart && resolvedBody != null && !("content-type" in merged)) {
+					merged["content-type"] = "application/json";
+				}
+
 				client(typeof key === "string" ? key : keyStr, {
-					...options.init.value,
+					...initRef.value,
 					method:
-						method ?? options.init.value?.method ?? (body ? "POST" : "GET"),
-					body: body ?? options.init.value?.body,
+						method ??
+						initRef.value?.method ??
+						(resolvedBody != null ? "POST" : "GET"),
+					body: resolvedBody,
+					headers: merged,
 					signal: controller.value!.signal,
 				})
-					.then((res) => {
+					.then(async (res) => {
 						if (controller.value!.signal.aborted) return;
 
-						// DEV-ONLY: Validate ApiResponse<T> format
 						if (
 							process.env.NODE_ENV !== "production" &&
 							(typeof res !== "object" ||
@@ -136,29 +168,32 @@ export function createValyn({
 						}
 
 						if (res.status === "failed") {
-							options.onError && options.onError(res.error);
+							if (_options.onError && !globalRetryDone) {
+								const shouldRetry = await _options.onError(res.error);
+								if (shouldRetry && !controller.value!.signal.aborted) {
+									globalRetryDone = true;
+									attempt(0);
+									return;
+								}
+							}
+							options.onError?.(res.error);
 							state.value = new AsyncError(res.error);
-						} else {
-							const data = options.onData?.(res.data) ?? res.data;
-							options.onSuccess?.(data);
-							const sd = new AsyncData(Some(data));
-							if (options.cache !== false) cache.set(keyStr, sd);
-							state.value = sd;
+							return;
 						}
+
+						const data = options.onData?.(res.data) ?? res.data;
+						options.onSuccess?.(data);
+						const sd = new AsyncData(Some(data));
+						if (options.cache !== false) cache.set(keyStr, sd);
+						state.value = sd;
 					})
 					.catch((err) => {
 						if (controller.value!.signal.aborted) return;
 						if (tries > 0) return attempt(tries - 1);
-						options.onError?.({
-							name: "NetworkError",
-							message: err.message,
-							code: "500",
-						});
-
+						options.onError?.({ name: "NetworkError", message: err.message });
 						state.value = new AsyncError({
 							name: "NetworkError",
 							message: err.message,
-							code: "500",
 						});
 					});
 			};
@@ -168,10 +203,7 @@ export function createValyn({
 
 		if (isClient) {
 			onMounted(() => {
-				if (options.fetchOnMount !== false && !options.initialData) {
-					doFetch();
-				}
-
+				if (options.fetchOnMount !== false && !options.initialData) doFetch();
 				if (options.fetchInterval) {
 					intervalId = window.setInterval(doFetch, options.fetchInterval);
 				}
@@ -194,16 +226,20 @@ export function createValyn({
 		const fetchFn = (
 			methodOrOpts?:
 				| RequestMethod
-				| { method?: RequestMethod; body?: BodyInit },
-			body?: BodyInit,
+				| {
+						method?: RequestMethod;
+						body?: RequestBody;
+						files?: File[] | [string, File][];
+				  },
+			body?: RequestBody,
+			files?: File[] | [string, File][],
 		) => {
 			if (!isClient) return;
-
 			cache.delete(normalizeKey(keyStr));
 			if (typeof methodOrOpts === "string") {
-				doFetch(methodOrOpts, body);
+				doFetch(methodOrOpts, body, files);
 			} else {
-				doFetch(methodOrOpts?.method, methodOrOpts?.body);
+				doFetch(methodOrOpts?.method, methodOrOpts?.body, methodOrOpts?.files);
 			}
 		};
 
@@ -224,7 +260,7 @@ export function createValyn({
 }
 
 /**
- * useValync is a client-side data fetching hook that provides async state management
+ * useValync is a client-side data fetching composable that provides async state management
  * with caching, optimistic updates, and reactive watching support.
  *
  * ⚠️ NOTE:
@@ -237,14 +273,13 @@ export function createValyn({
  *      data?: T,
  *      error?: { name: string; message: string; code?: number }
  *    }
- *
- * Use `onData` if `res.data` does not match your expected frontend type or if you wish to apply transformation,
- * so returning a plain array or object without the `status` field will cause issues.
  */
 export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
 	let intervalId: number | undefined;
 	const keyStr = normalizeKey(key);
 	const controller = ref<AbortController>();
+
+	const initRef: Ref<RequestInit> = options.init ?? shallowRef({} as RequestInit);
 
 	let initialValue: AsyncValue<T>;
 	if (options.initialData) {
@@ -264,7 +299,11 @@ export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
 	const isClient =
 		typeof window !== "undefined" && typeof AbortController !== "undefined";
 
-	const doFetch = (method?: RequestMethod, body?: BodyInit) => {
+	const doFetch = (
+		method?: RequestMethod,
+		body?: RequestBody,
+		files?: File[] | [string, File][],
+	) => {
 		controller.value?.abort();
 		controller.value = new AbortController();
 
@@ -275,14 +314,36 @@ export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
 
 		state.value = new AsyncLoading<T>();
 
+		const resolvedFiles = files ?? options.files;
+		const { body: resolvedBody, isMultipart } = buildRequestBody(
+			body ?? (initRef.value?.body as RequestBody | undefined),
+			resolvedFiles,
+		);
+
+		const buildHeaders = (): Record<string, string> => {
+			const h = mergeHeaders(initRef.value?.headers);
+			if (!isMultipart && resolvedBody != null && !("content-type" in h)) {
+				h["content-type"] = "application/json";
+			}
+			return h;
+		};
+
 		const attempt = (tries: number) => {
 			fetch(typeof key === "string" ? key : keyStr, {
-				...options.init.value,
-				method: method ?? options.init.value?.method ?? (body ? "POST" : "GET"),
-				body: body ?? options.init.value?.body,
+				...initRef.value,
+				method:
+					method ??
+					initRef.value?.method ??
+					(resolvedBody != null ? "POST" : "GET"),
+				body: resolvedBody,
+				headers: buildHeaders(),
 				signal: controller.value!.signal,
 			})
 				.then(async (resp): Promise<ApiResponse<T>> => {
+					if (resp.status === 204) {
+						return { status: "success", data: null as unknown as T };
+					}
+
 					let json: any;
 					try {
 						json = await resp.json();
@@ -292,11 +353,11 @@ export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
 							error: {
 								name: "ParseError",
 								message: "Invalid JSON",
+								code: resp.status,
 							},
 						};
 					}
 
-					// DEV-ONLY: Validate ApiResponse format
 					if (
 						process.env.NODE_ENV !== "production" &&
 						(typeof json !== "object" ||
@@ -323,8 +384,10 @@ export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
 				})
 				.then((res) => {
 					if (controller.value!.signal.aborted) return;
-					if (res.status === "failed") state.value = new AsyncError(res.error);
-					else {
+					if (res.status === "failed") {
+						options.onError?.(res.error);
+						state.value = new AsyncError(res.error);
+					} else {
 						const data = options.onData?.(res.data) ?? res.data;
 						options.onSuccess?.(data);
 						const sd = new AsyncData(Some(data));
@@ -335,11 +398,7 @@ export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
 				.catch((err) => {
 					if (controller.value!.signal.aborted) return;
 					if (tries > 0) return attempt(tries - 1);
-
-					options.onError?.({
-						name: "NetworkError",
-						message: err.message,
-					});
+					options.onError?.({ name: "NetworkError", message: err.message });
 					state.value = new AsyncError({
 						name: "NetworkError",
 						message: err.message,
@@ -352,10 +411,7 @@ export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
 
 	if (isClient) {
 		onMounted(() => {
-			if (options.fetchOnMount !== false && !options.initialData) {
-				doFetch();
-			}
-
+			if (options.fetchOnMount !== false && !options.initialData) doFetch();
 			if (options.fetchInterval) {
 				intervalId = window.setInterval(doFetch, options.fetchInterval);
 			}
@@ -376,16 +432,22 @@ export function useValync<T>(key: CacheKey, options: ValyncVueOptions<T> = {}) {
 	});
 
 	const fetchFn = (
-		methodOrOpts?: RequestMethod | { method?: RequestMethod; body?: BodyInit },
-		body?: BodyInit,
+		methodOrOpts?:
+			| RequestMethod
+			| {
+					method?: RequestMethod;
+					body?: RequestBody;
+					files?: File[] | [string, File][];
+			  },
+		body?: RequestBody,
+		files?: File[] | [string, File][],
 	) => {
 		if (!isClient) return;
-
 		cache.delete(normalizeKey(keyStr));
 		if (typeof methodOrOpts === "string") {
-			doFetch(methodOrOpts, body);
+			doFetch(methodOrOpts, body, files);
 		} else {
-			doFetch(methodOrOpts?.method, methodOrOpts?.body);
+			doFetch(methodOrOpts?.method, methodOrOpts?.body, methodOrOpts?.files);
 		}
 	};
 

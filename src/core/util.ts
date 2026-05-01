@@ -2,6 +2,10 @@ import { ApiResponse } from ".";
 
 export const DefaultValyncClient = <T>(url: string, init: RequestInit) =>
 	fetch(url, init).then(async (resp): Promise<ApiResponse<T>> => {
+		if (resp.status === 204) {
+			return { status: "success", data: null as unknown as T };
+		}
+
 		let json: any;
 		try {
 			json = await resp.json();
@@ -11,6 +15,7 @@ export const DefaultValyncClient = <T>(url: string, init: RequestInit) =>
 				error: {
 					name: "ParseError",
 					message: "Invalid JSON",
+					code: resp.status,
 				},
 			};
 		}

@@ -1,8 +1,11 @@
 // core.ts — core abstractions shared across frameworks
 import { Option } from "ts-results-es";
 
+export type RequestBody = BodyInit | Record<string, unknown>;
+
 export type ValyncOptions<T> = {
 	init?: Omit<RequestInit, "signal">;
+	files?: File[] | [string, File][];
 	cache?: boolean;
 	fetchOnMount?: boolean;
 	retryCount?: number;
@@ -125,4 +128,67 @@ export class AsyncData<T> extends AsyncValue<T> {
 	when<R>(h: Handler<T, R>): R {
 		return h.data ? h.data(this.value) : undefined;
 	}
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+	if (v === null || typeof v !== "object") return false;
+	if (v instanceof Blob) return false;
+	if (v instanceof FormData) return false;
+	if (v instanceof URLSearchParams) return false;
+	if (v instanceof ArrayBuffer) return false;
+	if (typeof ReadableStream !== "undefined" && v instanceof ReadableStream)
+		return false;
+	return true;
+}
+
+export function buildRequestBody(
+	body?: RequestBody | null,
+	files?: File[] | [string, File][],
+): { body: BodyInit | null | undefined; isMultipart: boolean } {
+	if (files?.length) {
+		const fd = body instanceof FormData ? body : new FormData();
+		if (body && !(body instanceof FormData) && isPlainObject(body)) {
+			for (const [k, v] of Object.entries(body)) {
+				fd.append(k, String(v));
+			}
+		}
+		for (const file of files) {
+			if (Array.isArray(file)) {
+				fd.append(file[0], file[1]);
+			} else {
+				fd.append("file", file as File);
+			}
+		}
+		return { body: fd, isMultipart: true };
+	}
+
+	if (body instanceof FormData) {
+		return { body, isMultipart: true };
+	}
+
+	if (isPlainObject(body)) {
+		return { body: JSON.stringify(body), isMultipart: false };
+	}
+
+	return { body: body as BodyInit | null | undefined, isMultipart: false };
+}
+
+export function mergeHeaders(
+	base?: HeadersInit,
+	extra?: HeadersInit,
+): Record<string, string> {
+	const result: Record<string, string> = {};
+	const append = (h?: HeadersInit) => {
+		if (!h) return;
+		if (h instanceof Headers) {
+			h.forEach((v, k) => (result[k] = v));
+		} else if (Array.isArray(h)) {
+			for (const [k, v] of h) result[k] = v;
+		} else {
+			Object.assign(result, h);
+		}
+	};
+	append(base);
+	append(extra);
+	return result;
 }

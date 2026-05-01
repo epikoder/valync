@@ -12,13 +12,31 @@ import {
 	AsyncObserver,
 	CacheKey,
 	RequestMethod,
+	RequestBody,
+	buildRequestBody,
+	mergeHeaders,
 } from "../core/index";
 
 const cache = new Map<string, AsyncData<any>>();
 
+export type CreateValynOptions = Pick<
+	ValyncOptions<any>,
+	"cache" | "retryCount" | "fetchOnMount"
+> & {
+	headers?: HeadersInit | (() => HeadersInit);
+	onError?: (err: {
+		name: string;
+		message: string;
+		code?: number | string;
+	}) => boolean | Promise<boolean>;
+};
+
 /**
  * createValyn creates a custom `useValync` hook bound to a provided HTTP client function.
  * Useful for plugging in your own fetch logic or a library like axios.
+ *
+ * The `options.onError` callback receives every API-level error. Returning `true` (or a
+ * Promise resolving to `true`) triggers a single retry — useful for token-refresh flows.
  *
  * ⚠️ NOTE:
  * Your `client()` function MUST return a Promise resolving to:
@@ -31,19 +49,14 @@ const cache = new Map<string, AsyncData<any>>();
  *      error?: { name: string; message: string; code?: number }
  *    }
  *
- * use `onData` to apply transformation from `any => T` for individual endpoint when neccessary.
- * Returning a plain array or object without the `status` field will cause issues.
+ * use `onData` to apply transformation from `any => T` for individual endpoints when necessary.
  */
-
 export function createValyn({
 	client,
 	options: _options = {},
 }: {
 	client: (url: string, init: RequestInit) => Promise<ApiResponse<any>>;
-	options?: Pick<
-		ValyncOptions<any>,
-		"cache" | "retryCount" | "fetchOnMount"
-	> & { headers?: HeadersInit };
+	options?: CreateValynOptions;
 }) {
 	return function useValynHook<T>(
 		key: CacheKey,
@@ -55,17 +68,23 @@ export function createValyn({
 				| RequestMethod
 				| {
 						method?: RequestMethod;
-						body?: BodyInit;
+						body?: RequestBody;
+						files?: File[] | [string, File][];
 				  },
-			body?: BodyInit,
+			body?: RequestBody,
+			files?: File[] | [string, File][],
 		) => void,
 		(updater: (prev: T | null) => T) => void,
 		Observer<T>,
 	] {
-		options.init = options.init || {};
+		const resolvedGlobalHeaders =
+			typeof _options.headers === "function"
+				? _options.headers()
+				: _options.headers;
+
 		options.init = {
 			...options.init,
-			headers: { ...options.init.headers, ..._options.headers },
+			headers: mergeHeaders(options.init?.headers, resolvedGlobalHeaders),
 		};
 		options.cache = options.cache ?? _options.cache;
 		options.retryCount = options.retryCount ?? _options.retryCount;
@@ -77,11 +96,9 @@ export function createValyn({
 		const observerRef = useRef(new AsyncObserver<T>(new AsyncData<T>(None)));
 		const [state, setState] = useState<AsyncValue<T>>((): AsyncValue<T> => {
 			if (options.initialData) {
-				const initialData =
-					options.initialData.status === "success"
-						? new AsyncData(Some(options.initialData.data))
-						: new AsyncError<T>(options.initialData.error);
-				return initialData;
+				return options.initialData.status === "success"
+					? new AsyncData(Some(options.initialData.data))
+					: new AsyncError<T>(options.initialData.error);
 			}
 			if (options.cache !== false && cache.has(keyStr)) {
 				return cache.get(keyStr)!;
@@ -92,7 +109,11 @@ export function createValyn({
 		const isClient =
 			typeof window !== "undefined" && typeof AbortController !== "undefined";
 
-		const doFetch = (method?: RequestMethod, body?: BodyInit) => {
+		const doFetch = (
+			method?: RequestMethod,
+			body?: RequestBody,
+			files?: File[] | [string, File][],
+		) => {
 			controllerRef.current?.abort();
 			const ctrl = new AbortController();
 			controllerRef.current = ctrl;
@@ -104,17 +125,38 @@ export function createValyn({
 
 			setState(new AsyncLoading<T>());
 
+			const resolvedFiles = files ?? options.files;
+			const { body: resolvedBody, isMultipart } = buildRequestBody(
+				body ?? (options.init?.body as RequestBody | undefined),
+				resolvedFiles,
+			);
+
+			let globalRetryDone = false;
+
 			const attempt = (tries: number) => {
+				// Re-resolve dynamic global headers on every attempt (supports token refresh)
+				const freshGlobalHeaders =
+					typeof _options.headers === "function"
+						? _options.headers()
+						: _options.headers;
+				const merged = mergeHeaders(options.init?.headers, freshGlobalHeaders);
+				if (!isMultipart && resolvedBody != null && !("content-type" in merged)) {
+					merged["content-type"] = "application/json";
+				}
+
 				client(typeof key === "string" ? key : keyStr, {
 					...options.init,
-					method: method ?? options.init?.method ?? (body ? "POST" : "GET"),
-					body: body ?? options.init?.body,
+					method:
+						method ??
+						options.init?.method ??
+						(resolvedBody != null ? "POST" : "GET"),
+					body: resolvedBody,
+					headers: merged,
 					signal: ctrl.signal,
 				})
-					.then((res) => {
+					.then(async (res) => {
 						if (ctrl.signal.aborted) return;
 
-						// DEV-ONLY: Validate ApiResponse<T> shape
 						if (
 							process.env.NODE_ENV !== "production" &&
 							(typeof res !== "object" ||
@@ -128,6 +170,14 @@ export function createValyn({
 						}
 
 						if (res.status === "failed") {
+							if (_options.onError && !globalRetryDone) {
+								const shouldRetry = await _options.onError(res.error);
+								if (shouldRetry && !ctrl.signal.aborted) {
+									globalRetryDone = true;
+									attempt(0);
+									return;
+								}
+							}
 							setState(new AsyncError(res.error));
 							options.onError?.(res.error);
 							return;
@@ -142,15 +192,9 @@ export function createValyn({
 					.catch((err) => {
 						if (ctrl.signal.aborted) return;
 						if (tries > 0) return attempt(tries - 1);
-						options.onError?.({
-							name: "NetworkError",
-							message: err.message,
-						});
+						options.onError?.({ name: "NetworkError", message: err.message });
 						setState(
-							new AsyncError({
-								name: "NetworkError",
-								message: err.message,
-							}),
+							new AsyncError({ name: "NetworkError", message: err.message }),
 						);
 					});
 			};
@@ -175,7 +219,6 @@ export function createValyn({
 
 		useEffect(() => {
 			if (!options.fetchInterval || !isClient) return;
-
 			const intervalId = setInterval(doFetch, options.fetchInterval);
 			return () => clearInterval(intervalId);
 		}, [options.fetchInterval, isClient]);
@@ -183,16 +226,20 @@ export function createValyn({
 		const fetchFn = (
 			methodOrOpts?:
 				| RequestMethod
-				| { method?: RequestMethod; body?: BodyInit },
-			body?: BodyInit,
+				| {
+						method?: RequestMethod;
+						body?: RequestBody;
+						files?: File[] | [string, File][];
+				  },
+			body?: RequestBody,
+			files?: File[] | [string, File][],
 		) => {
 			if (!isClient) return;
-
 			cache.delete(normalizeKey(keyStr));
 			if (typeof methodOrOpts === "string") {
-				doFetch(methodOrOpts, body);
+				doFetch(methodOrOpts, body, files);
 			} else {
-				doFetch(methodOrOpts?.method, methodOrOpts?.body);
+				doFetch(methodOrOpts?.method, methodOrOpts?.body, methodOrOpts?.files);
 			}
 		};
 
@@ -226,10 +273,10 @@ export function createValyn({
  *      error?: { name: string; message: string; code?: number }
  *    }
  *
- * Use `onData` if `res.data` does not match your expected frontend type or if you wish to apply transformation,
- * so returning a plain array or object without the `status` field will cause issues.
+ * Use `onData` if `res.data` does not match your expected frontend type or if you wish to
+ * apply transformation. Returning a plain array or object without the `status` field will
+ * cause issues.
  */
-
 export function useValync<T>(
 	key: CacheKey,
 	options: ValyncOptions<T> = {},
@@ -240,9 +287,11 @@ export function useValync<T>(
 			| RequestMethod
 			| {
 					method?: RequestMethod;
-					body?: BodyInit;
+					body?: RequestBody;
+					files?: File[] | [string, File][];
 			  },
-		body?: BodyInit,
+		body?: RequestBody,
+		files?: File[] | [string, File][],
 	) => void,
 	(updater: (prev: T | null) => T) => void,
 	Observer<T>,
@@ -266,7 +315,11 @@ export function useValync<T>(
 	const isClient =
 		typeof window !== "undefined" && typeof AbortController !== "undefined";
 
-	const doFetch = (method?: RequestMethod, body?: BodyInit) => {
+	const doFetch = (
+		method?: RequestMethod,
+		body?: RequestBody,
+		files?: File[] | [string, File][],
+	) => {
 		controllerRef.current?.abort();
 		const ctrl = new AbortController();
 		controllerRef.current = ctrl;
@@ -278,14 +331,36 @@ export function useValync<T>(
 
 		setState(new AsyncLoading<T>());
 
+		const resolvedFiles = files ?? options.files;
+		const { body: resolvedBody, isMultipart } = buildRequestBody(
+			body ?? (options.init?.body as RequestBody | undefined),
+			resolvedFiles,
+		);
+
+		const buildHeaders = (): Record<string, string> => {
+			const h = mergeHeaders(options.init?.headers);
+			if (!isMultipart && resolvedBody != null && !("content-type" in h)) {
+				h["content-type"] = "application/json";
+			}
+			return h;
+		};
+
 		const attempt = (tries: number) => {
 			fetch(typeof key === "string" ? key : keyStr, {
 				...options.init,
-				method: method ?? options.init?.method ?? (body ? "POST" : "GET"),
-				body: body ?? options.init?.body,
+				method:
+					method ??
+					options.init?.method ??
+					(resolvedBody != null ? "POST" : "GET"),
+				body: resolvedBody,
+				headers: buildHeaders(),
 				signal: ctrl.signal,
 			})
 				.then(async (resp): Promise<ApiResponse<T>> => {
+					if (resp.status === 204) {
+						return { status: "success", data: null as unknown as T };
+					}
+
 					let json: any;
 					try {
 						json = await resp.json();
@@ -295,11 +370,11 @@ export function useValync<T>(
 							error: {
 								name: "ParseError",
 								message: "Invalid JSON",
+								code: resp.status,
 							},
 						};
 					}
 
-					// DEV-ONLY: Validate ApiResponse format
 					if (
 						process.env.NODE_ENV !== "production" &&
 						(typeof json !== "object" ||
@@ -342,15 +417,9 @@ export function useValync<T>(
 					if (ctrl.signal.aborted) return;
 					if (tries > 0) return attempt(tries - 1);
 					setState(
-						new AsyncError({
-							name: "NetworkError",
-							message: err.message,
-						}),
+						new AsyncError({ name: "NetworkError", message: err.message }),
 					);
-					options.onError?.({
-						name: "NetworkError",
-						message: err.message,
-					});
+					options.onError?.({ name: "NetworkError", message: err.message });
 				});
 		};
 
@@ -374,22 +443,27 @@ export function useValync<T>(
 
 	useEffect(() => {
 		if (!options.fetchInterval || !isClient) return;
-
 		const intervalId = setInterval(doFetch, options.fetchInterval);
 		return () => clearInterval(intervalId);
 	}, [options.fetchInterval, isClient]);
 
 	const fetchFn = (
-		methodOrOpts?: RequestMethod | { method?: RequestMethod; body?: BodyInit },
-		body?: BodyInit,
+		methodOrOpts?:
+			| RequestMethod
+			| {
+					method?: RequestMethod;
+					body?: RequestBody;
+					files?: File[] | [string, File][];
+			  },
+		body?: RequestBody,
+		files?: File[] | [string, File][],
 	) => {
 		if (!isClient) return;
-
 		cache.delete(normalizeKey(keyStr));
 		if (typeof methodOrOpts === "string") {
-			doFetch(methodOrOpts, body);
+			doFetch(methodOrOpts, body, files);
 		} else {
-			doFetch(methodOrOpts?.method, methodOrOpts?.body);
+			doFetch(methodOrOpts?.method, methodOrOpts?.body, methodOrOpts?.files);
 		}
 	};
 
